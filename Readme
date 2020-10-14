@@ -1,0 +1,386 @@
+installation
+
+sudo useradd -M -r -s  /bin/false prometheus
+sudo mkdir /etc/prometheus /var/lib/prometheus
+
+wget https://s3-eu-west-1.amazonaws.com/deb.robustperception.io/41EFC99D.gpg | apt-key add -
+
+sudo apt-get update
+sudo apt-get install prometheus prometheus-node-exporter prometheus-pushgateway prometheus-alertmanager
+
+It dows not have all the metrics
+**********************************************************************************************************
+https://github.com/prometheus/prometheus/releases
+
+https://devopscube.com/install-configure-prometheus-linux/
+
+sudo useradd --no-create-home --shell /bin/false prometheus
+sudo mkdir /etc/prometheus
+sudo mkdir /var/lib/prometheus
+sudo chown prometheus:prometheus /etc/prometheus
+sudo chown prometheus:prometheus /var/lib/prometheus
+
+curl -LO https://github.com/prometheus/prometheus/releases and choice the release
+tar -xvf prometheus-?????.linux-amd64.tar.gz
+mv prometheus-?????.linux-amd64 prometheus-files
+
+sudo cp prometheus-files/prometheus /usr/local/bin/
+sudo cp prometheus-files/promtool /usr/local/bin/
+sudo chown prometheus:prometheus /usr/local/bin/prometheus
+sudo chown prometheus:prometheus /usr/local/bin/promtool
+
+sudo cp -r prometheus-files/consoles /etc/prometheus
+sudo cp -r prometheus-files/console_libraries /etc/prometheus
+sudo chown -R prometheus:prometheus /etc/prometheus/consoles
+sudo chown -R prometheus:prometheus /etc/prometheus/console_libraries
+
+sudo vi /etc/prometheus/prometheus.yml
+
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9090']
+
+sudo chown prometheus:prometheus /etc/prometheus/prometheus.yml
+
+sudo vi /etc/systemd/system/prometheus.service
+
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=prometheus
+Group=prometheus
+Type=simple
+ExecStart=/usr/local/bin/prometheus \
+    --config.file /etc/prometheus/prometheus.yml \
+    --storage.tsdb.path /var/lib/prometheus/ \
+    --web.console.templates=/etc/prometheus/consoles \
+    --web.console.libraries=/etc/prometheus/console_libraries
+
+[Install]
+WantedBy=multi-user.target
+
+sudo systemctl daemon-reload
+sudo systemctl start prometheus
+**********************************************************************************************************
+vim /etc/prometheus/prometheus.yml 
+    scrape_interval:     10s
+
+sudo killall -HUP  prometheus
+
+for testis the change 
+http://192.168.2.85:9090/api/v1/status/config
+
+setup another machine for node_exporter
+***********
+sudo apt update
+sudo apt install prometheus-node-exporter
+***********
+I've got some problem with installi node exporter
+I installed the prometheus-node-exporter instead of node-exporter 
+I don't konw they are the same now 
+As we go further it'll be shown.
+use the structure in https://back2basics.io/2020/04/setup-a-prometheus-node-exporter-on-ubuntu-18-04-server-for-the-raspberry-pi/ 
+for test the node exporter
+curl localhost:9100/metrics 
+
+got to the prometheus config and do as follow 
+
+vim /etc/prometheus/prometheus.yml
+
+scrape_config:
+    add anoder job_name for node exporter as same as prometheus
+
+     - job_name: 'prometheus'
+
+    # Override the global default and scrape targets from this job every 5 seconds.
+    scrape_interval: 5s 
+    scrape_timeout: 5s
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: node
+    # If prometheus-node-exporter is installed, grab stats about the local
+    # machine by default.
+    static_configs:
+      - targets: ['localhost:9100']
+ as I installed the node exporter via apt it's changed the file already, so smart
+
+ for testing go to ""expression browser"" ;-) remmember it 
+
+ http://localhost:9090/ --> up --> execute --> you should the both of them
+
+**********************************************************************************************************
+monitoring software
+
+apache exporter
+
+installation
+First of all please do install apache2
+
+releases: https://github.com/Lusitaniae/apache_exporter/releases
+
+sudo useradd -M -r -s  /bin/false apache-exporter
+ wget release url
+ tar xvfz the downloaded file
+ sudo cp apache_exporter-0.8.0.linux-amd64/apache_exporter /usr/local/bin
+ sudo chown apache_exporter:apache_exporter /usr/local/bin/apache_exporter
+
+ sudo vim /etc/systemd/system/apache_exporter.service
+  
+    [Unit]
+    Description=Prometheus Apache exporter
+    Wants=network-online.target
+    After=network-online.target
+
+    [Service]
+
+    User=apache_exporter
+    Group=apache_exporter
+    Type=simple
+    ExecStart=/usr/local/bin/apache_exporter
+
+    [Install]
+    WantedBy=multi-user.target
+
+sudo systemctl daemon-reload
+sudo systemctl start apache_exporter.Service
+sudo systemctl enable apache_exporter.Service
+
+add to prometheus config file
+**********************************************************************************************************
+Pushgetway 
+
+installation
+
+sudo useradd -M -r -s  /bin/false pushgateway
+https://github.com/prometheus/pushgateway/releases
+
+https://github.com/prometheus/pushgateway/releases/download/v1.3.0/pushgateway-1.3.0.linux-amd64.tar.gz
+
+copy to /usr/local/bin
+chown pushgateway:pushgateway /user/local/bin/pushgateway
+
+vim /etc/systemd/system/pushgateway.service
+
+
+[Unit]
+Description=Prometheus Pushgetway
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+
+User=pushgateway
+Group=pushgateway
+Type=simple
+ExecStart=/usr/local/bin/pushgateway
+
+[Install]
+WantedBy=multi-user.target
+
+sudo systemctl daemon-reload
+sudo systemctl start pushgateway.Service
+sudo systemctl enable pushgateway.Service
+
+add to prometheus config file with honor_lables: true under the job_name
+**********************************************************************************************************
+Recording rules
+
+mkdir -p /etc/prometheus/rules
+vim /etc/prometheus/prometheus.yml
+  -->
+      rule_files:
+        - "/etc/prometheus/rules/*"
+
+*********** A simple example of record rules file ***********
+https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#:~:text=Configuring%20rules,-Prometheus%20supports%20two&text=To%20include%20rules%20in%20Prometheus,SIGHUP%20to%20the%20Prometheus%20process.
+
+groups:
+  - name: example
+    rules:
+    - record: job:http_inprogress_requests:sum
+      expr: sum by (job) (http_inprogress_requests)
+
+*********** End ***********
+
+
+vim /etc/prometheus/rules/node_exporter_rules.yml
+groups:
+- name: node_exporter
+  interval: 15s
+  rules:
+  - record: node_exporter:cpu_usage
+    expr: sum(rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m])) * 100 / 2
+
+**********************************************************************************************************
+Alertmanage installation
+We will install alertmanager in the prometheus server
+
+sudo useradd -M -r -s  /bin/false alertmanager
+
+https://github.com/prometheus/alertmanager/releases
+
+wget https://github.com/prometheus/alertmanager/releases/download/v0.21.0/alertmanager-0.21.0.linux-amd64.tar.gz
+
+tar xvfz alertmanager-0.21.0.linux-amd64.tar.gz
+
+cp alertmanager-0.21.0.linux-amd64/{alertmanager,amtool} /usr/local/bin
+chown alertmanager:alertmanager /usr/local/bin/{alertmanager,amtool}
+mkdir -p /etc/alertmanager
+cp alertmanager-0.21.0.linux-amd64/alertmanager.yml /etc/alertmanager
+chown -R alertmanager:alertmanager /etc/alertmanager
+mkdir -p /var/lib/alertmanager
+chown -R alertmanager:alertmanager /var/lib/alertmanager/
+mkdir -p /etc/amtool
+vim /etc/amtool/config.yml
+  -->
+      alertmanager.url: http://localhost:9093
+vim /etc/systemd/system/alertmanager.service
+  -->
+[Unit]
+Description=Alert Manager
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=alertmanager
+Group=alertmanager
+ExecStart=/usr/local/bin/alertmanager \
+  --config.file=/etc/alertmanager/alertmanager.yml \
+  --storage.path=/var/lib/alertmanager
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+vim /etc/prometheus/prometheus.yml 
+-->
+    alreting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - "localhost:9093"
+
+
+for load balancing and installing the second alertmanager server you have to done the exact configuration 
+the only config that is chenged is:
+add the  server one in the first server in the alertmanager.service file
+ExecStart=/usr/local/bin/alertmanager \
+  --config.file=/etc/alertmanager/alertmanager.yml \
+  --storage.path=/var/lib/alertmanager
+  --cluster.peer=server1:9094
+
+and in the secnd server the first one
+
+and also in the prometheus configuratio we will add the second server
+vim /etc/prometheus/prometheus.yml 
+-->
+    alreting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - "localhost:9093, server2:9093"
+
+
+Setup an Alert
+
+vim /etc/prometheus/rules/instanceDown.yml
+-->
+groups:
+- name: node_exporter
+  rules:
+  - alert: instanceDown
+    expr: up{job="node-exporter"}==0
+
+**********************************************************************************************************
+High availability in prometheus
+
+you will setup a new server and copy the all configuration from the first server
+Don't remmeber to reanme some localhosts to public IP
+
+**********************************************************************************************************
+Hierarchical federation
+Hierarchical federation allows Prometheus to scale to environments with tens of data centers and millions of nodes. In this use case, 
+the federation topology resembles a tree, with higher-level Prometheus servers collecting aggregated time series data from a larger number of subordinated servers.
+
+For example, a setup might consist of many per-datacenter Prometheus servers that collect data in high detail (instance-level drill-down), 
+and a set of global Prometheus servers which collect and store only aggregated data (job-level drill-down) from those local servers. 
+This provides an aggregate global view and detailed local views.
+
+Cross-service federation
+In cross-service federation, a Prometheus server of one service is configured to scrape selected data from another service's Prometheus server to enable 
+alerting and queries against both datasets within a single server.
+
+For example, a cluster scheduler running multiple services might expose resource usage information (like memory and CPU usage) about service instances running 
+on the cluster. On the other hand, a service running on that cluster will only expose application-specific service metrics. Often, these two sets of metrics are 
+scraped by separate Prometheus servers. Using federation, the Prometheus server containing service-level metrics may pull in the cluster resource usage metrics 
+about its specific service from the cluster Prometheus, so that both sets of metrics can be used within that server.
+
+Install a new prometheus server, I'll call it prometheus2
+Federation configuration is as easy as adding a new job
+
+scrape_configs:
+  - job_name: 'federate'
+    scrape_interval: 15s
+
+    honor_labels: true
+    metrics_path: '/federate'
+
+    params:
+      'match[]':
+        - '{job!~"prometheus"}'
+        
+
+    static_configs:
+      - targets:
+        - 'prometheus1:9090'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
